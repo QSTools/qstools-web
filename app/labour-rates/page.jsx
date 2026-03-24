@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
 import LabourRateForm from "@/components/labour/LabourRateForm";
 import LabourRateOutput from "@/components/labour/LabourRateOutput";
@@ -9,7 +10,7 @@ import { formatCurrency } from "@/lib/calculations/labourPageHelpers";
 import { calculateCommercialSummary } from "@/lib/calculations/commercialSummaryHelpers";
 import useLabourRatesPage from "@/lib/hooks/useLabourRatesPage";
 
-export default function LabourRatesPage() {
+function LabourRatesPageContent() {
   const {
     form,
     setForm,
@@ -41,17 +42,14 @@ export default function LabourRatesPage() {
   return (
     <main className="min-h-screen bg-background">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-6 py-8 lg:px-8">
-
         {/* ================= HEADER ================= */}
         <div className="space-y-3">
-
           {/* QS Tools + Help */}
           <div className="flex items-center gap-3">
             <div className="inline-flex items-center rounded-full border border-border/60 bg-muted/40 px-3 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               QS Tools
             </div>
 
-            {/* 👇 Global Help link */}
             <Link
               href="/help"
               className="text-xs text-muted-foreground underline hover:text-foreground"
@@ -71,7 +69,6 @@ export default function LabourRatesPage() {
               then save profiles for later use in quotes.
             </p>
 
-            {/* 👇 Contextual Help */}
             <Link
               href="/help#labour-guide"
               className="inline-block text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
@@ -102,7 +99,6 @@ export default function LabourRatesPage() {
           storageKey="labour-page-employee-overheads"
         >
           <div className="space-y-4">
-
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="space-y-1">
                 <h2 className="text-lg font-semibold">Employee Overheads</h2>
@@ -111,7 +107,6 @@ export default function LabourRatesPage() {
                   software, and other recoverable costs.
                 </p>
 
-                {/* 👇 Help link */}
                 <Link
                   href="/help#overheads-guide"
                   className="inline-block text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
@@ -218,7 +213,6 @@ export default function LabourRatesPage() {
           defaultOpen={false}
           storageKey="labour-page-commercial-summary"
         >
-          {/* 👇 Help link */}
           <div className="mb-4">
             <Link
               href="/help#commercial-guide"
@@ -252,5 +246,13 @@ export default function LabourRatesPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function LabourRatesPage() {
+  return (
+    <Suspense fallback={<div className="p-6">Loading labour rates...</div>}>
+      <LabourRatesPageContent />
+    </Suspense>
   );
 }
