@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { Suspense } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import LabourRateForm from "@/components/labour/LabourRateForm";
 import LabourRateOutput from "@/components/labour/LabourRateOutput";
 import CommercialSummaryPanel from "@/components/commercial/CommercialSummaryPanel";
@@ -13,6 +14,8 @@ import { calculateCommercialSummary } from "@/lib/calculations/commercialSummary
 import useLabourRatesPage from "@/lib/hooks/useLabourRatesPage";
 
 function LabourRatesPageContent() {
+  const router = useRouter();
+
   const {
     form,
     setForm,
@@ -40,6 +43,16 @@ function LabourRatesPageContent() {
   const isEditing = profiles.some(
     (profile) => String(profile.id) === String(editingId)
   );
+
+  const handleSaveAndOpenCommercial = async () => {
+    if (isEditing) {
+      await handleUpdate();
+    } else {
+      await handleSave();
+    }
+
+    router.push("/commercial");
+  };
 
   return (
     <main className="min-h-screen bg-background">
@@ -231,12 +244,15 @@ function LabourRatesPageContent() {
               </p>
             </div>
 
-            <Link
-              href="/commercial"
+            <button
+              type="button"
+              onClick={handleSaveAndOpenCommercial}
               className="inline-flex items-center justify-center rounded-xl border px-4 py-2 text-sm font-medium transition hover:bg-accent"
             >
-              Open Commercial
-            </Link>
+              {isEditing
+                ? "Update Profile & Open Commercial"
+                : "Save Profile & Open Commercial"}
+            </button>
           </div>
         </div>
       </div>
