@@ -1,19 +1,311 @@
 "use client";
 
-export const dynamic = "force-dynamic";
+import { useEffect, useMemo, useState } from "react";
+import {
+  loadLabourProfiles,
+  saveLabourProfiles,
+  loadLabourDraft,
+  saveLabourDraft,
+  clearLabourDraft,
+  loadOverheadProfiles,
+} from "@/lib/storage/labourStorage";
+import {
+  buildLabourProfile,
+  insertProfile,
+  replaceProfile,
+  removeProfile,
+  buildDuplicatedLabourProfile,
+} from "@/lib/actions/labourProfileActions";
+import {
+  DEFAULT_FORM,
+  normaliseFormForCalculation,
+  calculateOverheadValues,
+} from "@/lib/calculations/labourPageHelpers";
 
-import { Suspense } from "react";
-import Link from "next/link";
-import LabourRateForm from "@/components/labour/LabourRateForm";
-import LabourRateOutput from "@/components/labour/LabourRateOutput";
-import CommercialSummaryPanel from "@/components/commercial/CommercialSummaryPanel";
-import CollapsibleSection from "@/components/labour/CollapsibleSection";
-import { formatCurrency } from "@/lib/calculations/labourPageHelpers";
-import { calculateCommercialSummary } from "@/lib/calculations/commercialSummaryHelpers";
-import useLabourRatesPage from "@/lib/hooks/useLabourRatesPage";
+function canUseBrowser() {
+  return typeof window !== "undefined";
+}
 
-function LabourRatesPageContent() {
+function getQueryParams() {
+  if (!canUseBrowser()) return new URLSearchParams();
+  return new URLSearchParams(window.location.search);
+}
+
+function replaceUrl(path) {
+  if (!canUseBrowser()) return;
+  window.history.replaceState({}, "", path);
+}
+
+function safeRandomId() {
+  if (
+    typeof globalThis !== "undefined" &&
+    globalThis.crypto &&
+    typeof globalThis.crypto.randomUUID === "function"
+  ) {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `labour-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export default function useLabourRatesPage() {
+  const [form, setForm] = useState(DEFAULT_FORM);
+  const [profiles, setProfiles] = useState([]);
+  const [editingId, setEditingId] = useState(null);
+
+  const [overheadProfiles, setOverheadProfiles] = useState([]);
+  const [selectedOverheadProfileId, setSelectedOverheadProfileId] = useState("");
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  function loadOverheadProfilesFromStorage() {
+    const loaded = loadOverheadProfiles();
+    setOverheadProfiles(Array.isArray(loaded) ? loaded : []);
+  }
+
+  function handleEdit(profile) {
+    setForm({
+      ...DEFAULT_FORM,
+      ...profile,
+    });
+
+    setEditingId(profile.id);
+    setSelectedOverheadProfileId(profile.selectedOverheadProfileId || "");
+
+    if (canUseBrowser()) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
+
+  useEffect(() => {
+    const savedProfiles = loadLabourProfiles();
+    const safeProfiles = Array.isArray(savedProfiles) ? savedProfiles : [];
+
+    setProfiles(safeProfiles);
+    loadOverheadProfilesFromStorage();
+
+    const savedDraft = loadLabourDraft();
+
+    if (savedDraft) {
+      if (savedDraft?.form) {
+        setForm({ ...DEFAULT_FORM, ...savedDraft.form });
+        setSelectedOverheadProfileId(savedDraft.selectedOverheadProfileId || "");
+
+        const draftEditingId = savedDraft.editingId || null;
+        const draftProfileExists = safeProfiles.some(
+          (profile) => String(profile.id) === String(draftEditingId)
+        );
+
+        setEditingId(draftProfileExists ? draftEditingId : null);
+      } else {
+        setForm({ ...DEFAULT_FORM, ...savedDraft });
+        setEditingId(null);
+      }
+    }
+
+    setIsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!canUseBrowser()) return;
+
+    function handleFocus() {
+      loadOverheadProfilesFromStorage();
+    }
+
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, []);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    saveLabourProfiles(profiles);
+  }, [profiles, isHydrated]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+
+    const editingProfileExists = profiles.some(
+      (profile) => String(profile.id) === String(editingId)
+    );
+
+    saveLabourDraft({
+      form,
+      selectedOverheadProfileId,
+      editingId: editingProfileExists ? editingId : null,
+    });
+  }, [form, selectedOverheadProfileId, editingId, profiles, isHydrated]);
+
+  useEffect(() => {
+    if (!isHydrated || !canUseBrowser()) return;
+
+    const params = getQueryParams();
+    const overheadProfileIdFromQuery = params.get("overheadProfileId") || "";
+
+    if (!overheadProfileIdFromQuery) return;
+
+    const exists = overheadProfiles.some(
+      (profile) => String(profile.id) === String(overheadProfileIdFromQuery)
+    );
+
+    if (!exists) {
+      replaceUrl("/labour-rates");
+      return;
+    }
+
+    setSelectedOverheadProfileId(overheadProfileIdFromQuery);
+
+    if (editingId) {
+      setProfiles((prev) =>
+        prev.map((profile) =>
+          String(profile.id) === String(editingId)
+            ? {
+                ...profile,
+                selectedOverheadProfileId: overheadProfileIdFromQuery,
+              }
+            : profile
+        )
+      );
+    }
+
+    replaceUrl("/labour-rates");
+  }, [overheadProfiles, editingId, isHydrated]);
+
+  useEffect(() => {
+    if (!isHydrated || !canUseBrowser()) return;
+
+    const params = getQueryParams();
+    const editIdFromQuery = params.get("edit");
+
+    if (!editIdFromQuery) return;
+
+    const profileToEdit = profiles.find(
+      (profile) => String(profile.id) === String(editIdFromQuery)
+    );
+
+    if (profileToEdit) {
+      handleEdit(profileToEdit);
+    } else {
+      setEditingId(null);
+    }
+
+    replaceUrl("/labour-rates");
+  }, [profiles, isHydrated]);
+
+  const selectedOverheadProfile =
+    overheadProfiles.find(
+      (profile) => String(profile.id) === String(selectedOverheadProfileId)
+    ) || null;
+
+  const totalAnnualOverhead = Number(
+    selectedOverheadProfile?.totalAnnualOverhead || 0
+  );
+
   const {
+    paidHoursPerYear,
+    productiveHoursPerYear,
+    overheadPerPaidHour,
+    overheadPerProductiveHour,
+  } = calculateOverheadValues(form, totalAnnualOverhead);
+
+  const safePaidHoursPerYear = Number(paidHoursPerYear || 0);
+  const safeProductiveHoursPerYear = Number(productiveHoursPerYear || 0);
+  const safeOverheadPerPaidHour = Number(overheadPerPaidHour || 0);
+  const safeOverheadPerProductiveHour = Number(overheadPerProductiveHour || 0);
+
+  const results = useMemo(() => {
+    const profileForPreview = buildLabourProfile({
+      form,
+      selectedOverheadProfileId,
+      overheadPerProductiveHour: safeOverheadPerProductiveHour,
+      normaliseFormForCalculation,
+      forcedId: form.id || editingId || "preview",
+    });
+
+    return profileForPreview?.results || null;
+  }, [
+    form,
+    selectedOverheadProfileId,
+    safeOverheadPerProductiveHour,
+    editingId,
+  ]);
+
+  function handleSave() {
+    const newProfile = buildLabourProfile({
+      form,
+      selectedOverheadProfileId,
+      overheadPerProductiveHour: safeOverheadPerProductiveHour,
+      normaliseFormForCalculation,
+      forcedId: safeRandomId(),
+    });
+
+    setProfiles((prev) => insertProfile(prev, newProfile));
+    setForm(newProfile);
+    setEditingId(newProfile.id);
+    setSelectedOverheadProfileId(newProfile.selectedOverheadProfileId || "");
+    clearLabourDraft();
+  }
+
+  function handleUpdate() {
+    const existingProfile = profiles.find(
+      (profile) => String(profile.id) === String(editingId)
+    );
+
+    if (!existingProfile) {
+      setEditingId(null);
+      return;
+    }
+
+    const updatedProfile = buildLabourProfile({
+      form,
+      selectedOverheadProfileId,
+      overheadPerProductiveHour: safeOverheadPerProductiveHour,
+      normaliseFormForCalculation,
+      existingProfile,
+      forcedId: editingId,
+    });
+
+    const updatedProfiles = replaceProfile(profiles, updatedProfile);
+
+    setProfiles(updatedProfiles);
+    setForm(updatedProfile);
+    setEditingId(updatedProfile.id);
+    clearLabourDraft();
+  }
+
+  function handleDelete(id) {
+    setProfiles((prev) => removeProfile(prev, id));
+
+    if (String(editingId) === String(id)) {
+      clearLabourDraft();
+      setForm(DEFAULT_FORM);
+      setEditingId(null);
+      setSelectedOverheadProfileId("");
+    }
+  }
+
+  function handleDuplicate(profile) {
+    const duplicatedProfile = buildDuplicatedLabourProfile({
+      profile,
+      overheadProfiles,
+      defaultForm: DEFAULT_FORM,
+      normaliseFormForCalculation,
+    });
+
+    setProfiles((prev) => insertProfile(prev, duplicatedProfile));
+  }
+
+  function handleClear() {
+    clearLabourDraft();
+    setForm(DEFAULT_FORM);
+    setEditingId(null);
+    setSelectedOverheadProfileId("");
+  }
+
+  function handleOverheadChange(e) {
+    setSelectedOverheadProfileId(e.target.value);
+  }
+
+  return {
     form,
     setForm,
     profiles,
@@ -22,232 +314,18 @@ function LabourRatesPageContent() {
     selectedOverheadProfileId,
     selectedOverheadProfile,
     totalAnnualOverhead,
-    paidHoursPerYear,
-    overheadPerPaidHour,
-    overheadPerProductiveHour,
+    paidHoursPerYear: safePaidHoursPerYear,
+    productiveHoursPerYear: safeProductiveHoursPerYear,
+    overheadPerPaidHour: safeOverheadPerPaidHour,
+    overheadPerProductiveHour: safeOverheadPerProductiveHour,
     results,
+    isHydrated,
     handleSave,
     handleUpdate,
+    handleEdit,
+    handleDelete,
+    handleDuplicate,
     handleClear,
     handleOverheadChange,
-  } = useLabourRatesPage();
-
-  const commercialSummary = calculateCommercialSummary({
-    results,
-    overheadPerProductiveHour,
-  });
-
-  const isEditing = profiles.some(
-    (profile) => String(profile.id) === String(editingId)
-  );
-
-  return (
-    <main className="min-h-screen bg-background">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-6 py-8 lg:px-8">
-        <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <div className="inline-flex items-center rounded-full border border-border/60 bg-muted/40 px-3 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              QS Tools
-            </div>
-
-            <Link
-              href="/help"
-              className="text-xs text-muted-foreground underline hover:text-foreground"
-            >
-              Help Centre
-            </Link>
-          </div>
-
-          <div className="space-y-2">
-            <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-              NZ Labour Rates
-            </h1>
-
-            <p className="max-w-3xl text-sm leading-6 text-muted-foreground sm:text-base">
-              Enter staff labour settings, calculate true cost and profitability,
-              then save profiles for later use in quotes.
-            </p>
-
-            <Link
-              href="/help#labour-guide"
-              className="inline-block text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
-            >
-              View Labour guide
-            </Link>
-          </div>
-        </div>
-
-        <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
-          <LabourRateForm
-            form={form}
-            setForm={setForm}
-            onSave={handleSave}
-            onUpdate={handleUpdate}
-            onClear={handleClear}
-            isEditing={isEditing}
-          />
-
-          <LabourRateOutput results={results} />
-        </div>
-
-        <CollapsibleSection
-          title="Employee Overheads"
-          defaultOpen={false}
-          storageKey="labour-page-employee-overheads"
-        >
-          <div className="space-y-4">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div className="space-y-1">
-                <h2 className="text-lg font-semibold">Employee Overheads</h2>
-                <p className="text-sm text-muted-foreground">
-                  Add staff-specific overheads like phone, PPE, tools, training,
-                  software, and other recoverable costs.
-                </p>
-
-                <Link
-                  href="/help#overheads-guide"
-                  className="inline-block text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
-                >
-                  How overhead allocation works
-                </Link>
-              </div>
-
-              <Link
-                href={{
-                  pathname: "/employee-overheads",
-                  query: {
-                    staffName: form.staffName || "",
-                    role: form.role || "",
-                    labourProfileId: editingId || form.id || "",
-                    hoursPerWeek: form.hoursPerWeek || "",
-                    efficiencyPct: form.efficiencyPct || "",
-                    overheadProfileId: selectedOverheadProfileId || "",
-                  },
-                }}
-                className="inline-flex items-center justify-center rounded-xl border px-4 py-2 text-sm font-medium transition hover:bg-accent"
-              >
-                Manage Overheads
-              </Link>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-3">
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Overhead Profile
-                </label>
-                <select
-                  className="w-full rounded-xl border bg-background px-3 py-2 text-sm"
-                  value={selectedOverheadProfileId}
-                  onChange={handleOverheadChange}
-                >
-                  <option value="">No overhead profile selected</option>
-                  {overheadProfiles.map((profile) => (
-                    <option key={profile.id} value={profile.id}>
-                      {profile.profileName || "Unnamed Profile"}
-                    </option>
-                  ))}
-                </select>
-
-                {selectedOverheadProfile && (
-                  <div className="mt-3 rounded-xl border bg-muted/30 p-3 text-sm">
-                    <div className="font-semibold">
-                      {selectedOverheadProfile.profileName}
-                    </div>
-                    <div className="text-muted-foreground">
-                      {selectedOverheadProfile.staffName || "No staff name"}
-                      {selectedOverheadProfile.role
-                        ? ` • ${selectedOverheadProfile.role}`
-                        : ""}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-xl border bg-muted/30 p-4">
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Annual Overhead
-                </div>
-                <div className="mt-1 text-lg font-semibold">
-                  {formatCurrency(totalAnnualOverhead)}
-                </div>
-              </div>
-
-              <div className="rounded-xl border bg-muted/30 p-4">
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Overhead / Productive Hr
-                </div>
-                <div className="mt-1 text-lg font-semibold">
-                  {formatCurrency(overheadPerProductiveHour)}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-xl border bg-muted/30 p-4">
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Paid Hours / Year
-                </div>
-                <div className="mt-1 text-lg font-semibold">
-                  {paidHoursPerYear.toFixed(2)}
-                </div>
-              </div>
-
-              <div className="rounded-xl border bg-muted/30 p-4">
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Overhead / Paid Hr
-                </div>
-                <div className="mt-1 text-lg font-semibold">
-                  {formatCurrency(overheadPerPaidHour)}
-                </div>
-              </div>
-            </div>
-          </div>
-        </CollapsibleSection>
-
-        <CollapsibleSection
-          title="Commercial Summary"
-          defaultOpen={false}
-          storageKey="labour-page-commercial-summary"
-        >
-          <div className="mb-4">
-            <Link
-              href="/help#commercial-guide"
-              className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
-            >
-              How to read this dashboard
-            </Link>
-          </div>
-
-          <CommercialSummaryPanel commercialSummary={commercialSummary} />
-        </CollapsibleSection>
-
-        <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h3 className="text-base font-semibold">Saved Profiles</h3>
-              <p className="text-sm text-muted-foreground">
-                {profiles.length} saved labour profile
-                {profiles.length === 1 ? "" : "s"} available in Commercial.
-              </p>
-            </div>
-
-            <Link
-              href="/commercial"
-              className="inline-flex items-center justify-center rounded-xl border px-4 py-2 text-sm font-medium transition hover:bg-accent"
-            >
-              Open Commercial
-            </Link>
-          </div>
-        </div>
-      </div>
-    </main>
-  );
-}
-
-export default function LabourRatesPage() {
-  return (
-    <Suspense fallback={<div className="p-6">Loading labour rates...</div>}>
-      <LabourRatesPageContent />
-    </Suspense>
-  );
+  };
 }
