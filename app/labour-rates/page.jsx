@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { Suspense } from "react";
 import Link from "next/link";
 import LabourRateForm from "@/components/labour/LabourRateForm";
@@ -42,9 +44,7 @@ function LabourRatesPageContent() {
   return (
     <main className="min-h-screen bg-background">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-6 py-8 lg:px-8">
-        {/* ================= HEADER ================= */}
         <div className="space-y-3">
-          {/* QS Tools + Help */}
           <div className="flex items-center gap-3">
             <div className="inline-flex items-center rounded-full border border-border/60 bg-muted/40 px-3 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               QS Tools
@@ -58,7 +58,6 @@ function LabourRatesPageContent() {
             </Link>
           </div>
 
-          {/* Title + description */}
           <div className="space-y-2">
             <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
               NZ Labour Rates
@@ -78,7 +77,6 @@ function LabourRatesPageContent() {
           </div>
         </div>
 
-        {/* ================= MAIN GRID ================= */}
         <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
           <LabourRateForm
             form={form}
@@ -92,7 +90,6 @@ function LabourRatesPageContent() {
           <LabourRateOutput results={results} />
         </div>
 
-        {/* ================= OVERHEADS ================= */}
         <CollapsibleSection
           title="Employee Overheads"
           defaultOpen={false}
@@ -207,7 +204,6 @@ function LabourRatesPageContent() {
           </div>
         </CollapsibleSection>
 
-        {/* ================= COMMERCIAL ================= */}
         <CollapsibleSection
           title="Commercial Summary"
           defaultOpen={false}
@@ -225,7 +221,6 @@ function LabourRatesPageContent() {
           <CommercialSummaryPanel commercialSummary={commercialSummary} />
         </CollapsibleSection>
 
-        {/* ================= SAVED PROFILES ================= */}
         <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
