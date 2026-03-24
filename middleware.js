@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
 
 export function middleware(request) {
-  const isLoggedIn =
-    request.cookies.get("qs-auth")?.value === "true";
+  const isLoggedIn = request.cookies.get("qs-auth")?.value === "true";
+  const { pathname } = request.nextUrl;
 
-  const url = request.nextUrl.clone();
+  if (pathname === "/login") {
+    return NextResponse.next();
+  }
 
-  if (!isLoggedIn && url.pathname !== "/login") {
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
+  if (!isLoggedIn) {
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   return NextResponse.next();
