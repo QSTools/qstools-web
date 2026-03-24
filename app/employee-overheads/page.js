@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
 import VehicleCostSection from "@/components/overheads/VehicleCostSection";
 import TotalOverheadSummary from "@/components/overheads/TotalOverheadSummary";
@@ -11,7 +12,7 @@ import OverheadFlagPanel from "@/components/overheads/OverheadFlagPanel";
 import CollapsibleSection from "@/components/overheads/CollapsibleSection";
 import useEmployeeOverheadsPage from "@/lib/hooks/useEmployeeOverheadsPage";
 
-export default function EmployeeOverheadsPage() {
+function EmployeeOverheadsPageContent() {
   const {
     form,
     labourProfiles,
@@ -161,5 +162,13 @@ export default function EmployeeOverheadsPage() {
         </CollapsibleSection>
       </div>
     </main>
+  );
+}
+
+export default function EmployeeOverheadsPage() {
+  return (
+    <Suspense fallback={<div className="p-6">Loading employee overheads...</div>}>
+      <EmployeeOverheadsPageContent />
+    </Suspense>
   );
 }
